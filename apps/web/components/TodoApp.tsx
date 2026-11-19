@@ -1,81 +1,97 @@
 'use client';
 
-import type { Todo } from '@todos/core/client';
-import { useMemo, useState } from 'react';
-import { todosApi as defaultApi, type TodosApi } from '@/lib/api-client';
+import type { Label, Todo } from '@todos/core/client';
+import { useMemo, useRef, useState } from 'react';
+import { useFormLabelSelection } from '@/hooks/useFormLabelSelection';
+import { useLabelFilter } from '@/hooks/useLabelFilter';
+import { useLabels } from '@/hooks/useLabels';
+import { useTodos } from '@/hooks/useTodos';
+import { appApi, type AppApi } from '@/lib/api-client';
+import { isFilterActive, matchesLabelFilter } from '@/lib/label-filter';
+import { FilterNotice, FilterSummary } from './FilterStatus';
+import { LabelFilterBar } from './LabelFilterBar';
+import { LabelManager } from './LabelManager';
 import { TodoForm } from './TodoForm';
 import { TodoList } from './TodoList';
 
 interface TodoAppProps {
   initialTodos: Todo[];
+  initialLabels: Label[];
   /** Injected in tests; defaults to the real HTTP client. */
-  api?: TodosApi;
+  api?: AppApi;
 }
 
-/** Same ordering as the server: open first, newest first within each group. */
-function sortTodos(todos: Todo[]): Todo[] {
-  return [...todos].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    return b.createdAt.localeCompare(a.createdAt);
+function countUsage(todos: readonly Todo[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const todo of todos) {
+    for (const id of todo.labelIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Composition only: state and actions live in hooks, markup in presentational components. */
+export function TodoApp({ initialTodos, initialLabels, api = appApi }: TodoAppProps) {
+  const todos = useTodos(api.todos, initialTodos);
+  const labels = useLabels(api.labels, initialLabels);
+  const labelFilter = useLabelFilter(labels.labels);
+  const { filter } = labelFilter;
+  const formLabels = useFormLabelSelection(filter.labelIds, labels.labels);
+
+  const [managerOpen, setManagerOpen] = useState(false);
+  const [hiddenTitle, setHiddenTitle] = useState<string | null>(null);
+  const newLabelInputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = isFilterActive(filter);
+  const visibleTodos = useMemo(
+    () => todos.todos.filter((todo) => matchesLabelFilter(todo, filter)),
+    [todos.todos, filter],
+  );
+  const openCount = visibleTodos.filter((todo) => !todo.completed).length;
+  const doneCount = visibleTodos.length - openCount;
+  const usageCounts = useMemo(() => countUsage(todos.todos), [todos.todos]);
+
+  /** Wraps a user action: the hidden-by-filter notice lasts only until the next action. */
+  function action<A extends unknown[], R>(handler: (...args: A) => R): (...args: A) => R {
+    return (...args) => {
+      setHiddenTitle(null);
+      return handler(...args);
+    };
+  }
+
+  const clearFilter = action(labelFilter.clear);
+
+  const createTodo = action(async (title: string) => {
+    const todo = await todos.create({ title, labelIds: formLabels.labelIds });
+    if (!todo) return false;
+    formLabels.reset();
+    if (!matchesLabelFilter(todo, filter)) setHiddenTitle(todo.title);
+    return true;
   });
-}
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-}
-
-export function TodoApp({ initialTodos, api = defaultApi }: TodoAppProps) {
-  const [todos, setTodos] = useState<Todo[]>(() => sortTodos(initialTodos));
-  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-
-  const openCount = useMemo(() => todos.filter((todo) => !todo.completed).length, [todos]);
-  const doneCount = todos.length - openCount;
-
-  function setBusy(id: string, busy: boolean) {
-    setBusyIds((current) => {
-      const next = new Set(current);
-      if (busy) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-
-  async function handleCreate(title: string): Promise<boolean> {
-    setError(null);
-    try {
-      const todo = await api.create(title);
-      setTodos((current) => sortTodos([todo, ...current]));
-      return true;
-    } catch (err) {
-      setError(errorMessage(err));
-      return false;
+  const removeLabel = action(async (id: string) => {
+    const removed = await labels.remove(id);
+    if (removed) {
+      todos.removeLabelFromAll(id);
+      labelFilter.drop(id);
     }
-  }
+    return removed;
+  });
 
-  async function handleToggle(todo: Todo) {
-    setError(null);
-    setBusy(todo.id, true);
-    try {
-      const updated = await api.setCompleted(todo.id, !todo.completed);
-      setTodos((current) => sortTodos(current.map((t) => (t.id === updated.id ? updated : t))));
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(todo.id, false);
-    }
-  }
+  /** A panel error belongs to the panel session: it does not survive closing and reopening. */
+  const toggleManager = action(() => {
+    labels.clearError();
+    setManagerOpen((open) => !open);
+  });
 
-  async function handleDelete(todo: Todo) {
-    setError(null);
-    setBusy(todo.id, true);
-    try {
-      await api.remove(todo.id);
-      setTodos((current) => current.filter((t) => t.id !== todo.id));
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(todo.id, false);
+  /** From a picker's empty state: open the panel, or focus its input when already open. */
+  function openManager() {
+    setHiddenTitle(null);
+    if (managerOpen) {
+      newLabelInputRef.current?.focus();
+      return;
     }
+    labels.clearError();
+    setManagerOpen(true);
   }
 
   return (
@@ -87,15 +103,64 @@ export function TodoApp({ initialTodos, api = defaultApi }: TodoAppProps) {
         </p>
       </header>
 
-      <TodoForm onCreate={handleCreate} />
+      <TodoForm
+        labels={labels.labels}
+        selectedLabelIds={formLabels.labelIds}
+        onSelectedLabelIdsChange={action(formLabels.setLabelIds)}
+        onCreate={createTodo}
+        onManageLabels={openManager}
+      />
 
-      {error && (
+      {todos.error && (
         <p className="error-banner" role="alert" data-testid="error-banner">
-          {error}
+          {todos.error}
         </p>
       )}
 
-      <TodoList todos={todos} busyIds={busyIds} onToggle={handleToggle} onDelete={handleDelete} />
+      <LabelFilterBar
+        labels={labels.labels}
+        filter={filter}
+        onToggleLabel={action(labelFilter.toggle)}
+        onToggleNoLabel={action(labelFilter.toggleNoLabel)}
+        managerOpen={managerOpen}
+        onToggleManager={toggleManager}
+      />
+
+      {managerOpen && (
+        <LabelManager
+          labels={labels.labels}
+          usageCounts={usageCounts}
+          pending={labels.pending}
+          error={labels.error}
+          onClearError={labels.clearError}
+          onCreate={action(labels.create)}
+          onUpdate={action(labels.update)}
+          onRemove={removeLabel}
+          newLabelInputRef={newLabelInputRef}
+        />
+      )}
+
+      {filtered && (
+        <FilterSummary
+          visible={visibleTodos.length}
+          total={todos.todos.length}
+          onClear={clearFilter}
+        />
+      )}
+
+      {hiddenTitle !== null && <FilterNotice title={hiddenTitle} onClear={clearFilter} />}
+
+      <TodoList
+        todos={visibleTodos}
+        labels={labels.labels}
+        busyIds={todos.busyIds}
+        filtered={filtered}
+        onClearFilter={clearFilter}
+        onToggle={action(todos.toggle)}
+        onDelete={action(todos.remove)}
+        onSetLabels={action(todos.setLabels)}
+        onManageLabels={openManager}
+      />
     </section>
   );
 }

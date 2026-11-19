@@ -1,6 +1,5 @@
-import { DomainError, ERROR_CODES, ValidationError, type ErrorCode } from '@todos/core';
-
-export const INTERNAL_ERROR_CODE = 'INTERNAL_ERROR';
+import { ERROR_CODES, ValidationError, type ErrorCode } from '@todos/core';
+import { GENERIC_ERROR_MESSAGE, INTERNAL_ERROR_CODE, type ApiErrorBody } from './api-types';
 
 const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   [ERROR_CODES.VALIDATION_ERROR]: 400,
@@ -10,8 +9,26 @@ const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   [ERROR_CODES.LABEL_LIMIT_REACHED]: 409,
 };
 
-export interface ApiErrorBody {
-  error: { code: ErrorCode | typeof INTERNAL_ERROR_CODE; message: string };
+/** Second argument of a route handler under a `[id]` segment. */
+export interface IdRouteContext {
+  params: Promise<{ id: string }>;
+}
+
+interface DomainErrorLike {
+  code: ErrorCode;
+  message: string;
+}
+
+/**
+ * Recognizes a domain error by its code, not with `instanceof DomainError`: the services live on
+ * globalThis and are often created by another bundle layer (the page render), whose copy of
+ * @todos/core has its own error classes.
+ */
+function asDomainError(error: unknown): DomainErrorLike | null {
+  if (!(error instanceof Error) || !('code' in error)) return null;
+  const { code } = error;
+  if (typeof code !== 'string' || !Object.hasOwn(HTTP_STATUS_BY_ERROR_CODE, code)) return null;
+  return { code: code as ErrorCode, message: error.message };
 }
 
 /** Parses a JSON request body; malformed JSON becomes a VALIDATION_ERROR. */
@@ -28,13 +45,15 @@ export async function withErrorHandling(handler: () => Promise<Response>): Promi
   try {
     return await handler();
   } catch (error) {
-    if (error instanceof DomainError) {
-      const body: ApiErrorBody = { error: { code: error.code, message: error.message } };
-      return Response.json(body, { status: HTTP_STATUS_BY_ERROR_CODE[error.code] });
+    const domainError = asDomainError(error);
+    if (domainError) {
+      const { code, message } = domainError;
+      const body: ApiErrorBody = { error: { code, message } };
+      return Response.json(body, { status: HTTP_STATUS_BY_ERROR_CODE[code] });
     }
     console.error(error);
     const body: ApiErrorBody = {
-      error: { code: INTERNAL_ERROR_CODE, message: 'Something went wrong. Please try again.' },
+      error: { code: INTERNAL_ERROR_CODE, message: GENERIC_ERROR_MESSAGE },
     };
     return Response.json(body, { status: 500 });
   }

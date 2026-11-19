@@ -20,7 +20,7 @@ Everything in this repo is in **English**: code, comments, commits, PRs, issue c
 
 ### Code conventions
 
-- Business rules live in `packages/core` (`TodoService`), never in route handlers or components.
+- Business rules live in `packages/core` (`TodoService`, `LabelService`), never in route handlers or components.
 - Route handlers stay thin: parse → call the service → `Response.json`. Errors go through `withErrorHandling`
   (`apps/web/lib/http.ts`), which maps domain error codes to HTTP statuses.
 - Constants instead of loose strings (error codes, endpoints, limits). Named types instead of inline object types.
@@ -31,14 +31,22 @@ Everything in this repo is in **English**: code, comments, commits, PRs, issue c
 
 ### HTTP API (current contract)
 
-| Method | Route            | Body                     | Success                 | Errors                                       |
-| ------ | ---------------- | ------------------------ | ----------------------- | -------------------------------------------- |
-| GET    | `/api/todos`     | —                        | `200 { todos: Todo[] }` | —                                            |
-| POST   | `/api/todos`     | `{ title: string }`      | `201 { todo: Todo }`    | `400 VALIDATION_ERROR`                       |
-| PATCH  | `/api/todos/:id` | `{ completed: boolean }` | `200 { todo: Todo }`    | `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND` |
-| DELETE | `/api/todos/:id` | —                        | `204`                   | `404 TODO_NOT_FOUND`                         |
+| Method | Route             | Body                                                          | Success                         | Errors                                                                    |
+| ------ | ----------------- | ------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------- |
+| GET    | `/api/todos`      | —                                                             | `200 { todos: Todo[] }`         | —                                                                         |
+| POST   | `/api/todos`      | `{ title: string, labelIds?: string[] }`                      | `201 { todo: Todo }`            | `400 VALIDATION_ERROR`                                                    |
+| PATCH  | `/api/todos/:id`  | `{ completed?: boolean, labelIds?: string[] }` (at least one) | `200 { todo: Todo }`            | `400 VALIDATION_ERROR`, `404 TODO_NOT_FOUND`                              |
+| DELETE | `/api/todos/:id`  | —                                                             | `204`                           | `404 TODO_NOT_FOUND`                                                      |
+| GET    | `/api/labels`     | —                                                             | `200 { labels: Label[] }`       | —                                                                         |
+| POST   | `/api/labels`     | `{ name: string, color?: LabelColor }`                        | `201 { label: Label }`          | `400 VALIDATION_ERROR`, `409 LABEL_NAME_TAKEN`, `409 LABEL_LIMIT_REACHED` |
+| PATCH  | `/api/labels/:id` | `{ name?: string, color?: LabelColor }` (at least one)        | `200 { label: Label }`          | `400 VALIDATION_ERROR`, `404 LABEL_NOT_FOUND`, `409 LABEL_NAME_TAKEN`     |
+| DELETE | `/api/labels/:id` | —                                                             | `204` (removed from every todo) | `404 LABEL_NOT_FOUND`                                                     |
 
-Error body: `{ error: { code, message } }`. `Todo = { id, title, completed, createdAt, completedAt }` (ISO dates).
+Error body: `{ error: { code, message } }`.
+`Todo = { id, title, completed, createdAt, completedAt, labelIds }` (ISO dates; `labelIds` replaces the whole set, at
+most 10, each an existing label). `Label = { id, name, color, createdAt }`: `name` 1–30 characters, unique
+case-insensitively; `color` is a palette key (`gray red orange yellow green teal blue purple`); at most 50 labels.
+Labels are sorted by name. Filtering by label is client-side via `?label=<id>&label=none` (no API parameter).
 
 ## Run
 
