@@ -1,23 +1,22 @@
-import { readJsonBody, withErrorHandling } from '@/lib/http';
+import type { TodoResponse } from '@/lib/api-types';
+import { readJsonBody, withErrorHandling, type IdRouteContext } from '@/lib/http';
 import { getTodoService } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
-
-/** PATCH /api/todos/:id { completed?, labelIds? } → 200 { todo } | 400 VALIDATION_ERROR | 404 TODO_NOT_FOUND */
-export function PATCH(request: Request, { params }: RouteParams): Promise<Response> {
+/** PATCH /api/todos/:id { completed } → 200 { todo } | 400 VALIDATION_ERROR | 404 TODO_NOT_FOUND */
+export function PATCH(request: Request, { params }: IdRouteContext): Promise<Response> {
   return withErrorHandling(async () => {
     const { id } = await params;
-    const todo = await getTodoService().update(id, await readJsonBody(request));
-    return Response.json({ todo });
+    const body: TodoResponse = {
+      todo: await getTodoService().update(id, await readJsonBody(request)),
+    };
+    return Response.json(body);
   });
 }
 
 /** DELETE /api/todos/:id → 204 | 404 TODO_NOT_FOUND */
-export function DELETE(_request: Request, { params }: RouteParams): Promise<Response> {
+export function DELETE(_request: Request, { params }: IdRouteContext): Promise<Response> {
   return withErrorHandling(async () => {
     const { id } = await params;
     await getTodoService().remove(id);

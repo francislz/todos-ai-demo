@@ -1,6 +1,5 @@
 import { DomainError, ERROR_CODES, ValidationError, type ErrorCode } from '@todos/core';
-
-export const INTERNAL_ERROR_CODE = 'INTERNAL_ERROR';
+import { GENERIC_ERROR_MESSAGE, INTERNAL_ERROR_CODE, type ApiErrorBody } from './api-types';
 
 const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   [ERROR_CODES.VALIDATION_ERROR]: 400,
@@ -10,8 +9,9 @@ const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   [ERROR_CODES.LABEL_LIMIT_REACHED]: 409,
 };
 
-export interface ApiErrorBody {
-  error: { code: ErrorCode | typeof INTERNAL_ERROR_CODE; message: string };
+/** Second argument of a route handler under a `[id]` segment. */
+export interface IdRouteContext {
+  params: Promise<{ id: string }>;
 }
 
 /** Parses a JSON request body; malformed JSON becomes a VALIDATION_ERROR. */
@@ -34,7 +34,7 @@ export async function withErrorHandling(handler: () => Promise<Response>): Promi
     }
     console.error(error);
     const body: ApiErrorBody = {
-      error: { code: INTERNAL_ERROR_CODE, message: 'Something went wrong. Please try again.' },
+      error: { code: INTERNAL_ERROR_CODE, message: GENERIC_ERROR_MESSAGE },
     };
     return Response.json(body, { status: 500 });
   }
