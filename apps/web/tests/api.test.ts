@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { InMemoryTodoRepository, TodoService } from '@todos/core';
+import { InMemoryTodoStore, TodoService } from '@todos/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as todoByIdRoute from '@/app/api/todos/[id]/route';
 import * as todosRoute from '@/app/api/todos/route';
@@ -22,7 +22,7 @@ async function createTodo(title: string) {
 
 describe('/api/todos', () => {
   beforeEach(() => {
-    setTodoService(new TodoService({ repository: new InMemoryTodoRepository() }));
+    setTodoService(new TodoService({ store: new InMemoryTodoStore() }));
   });
 
   afterEach(() => {

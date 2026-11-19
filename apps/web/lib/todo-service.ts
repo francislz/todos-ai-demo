@@ -1,5 +1,5 @@
 import 'server-only';
-import { FileTodoRepository, TodoService } from '@todos/core';
+import { FileTodoStore, TodoService } from '@todos/core';
 import { resolve } from 'node:path';
 
 const DEFAULT_DATA_FILE = '.data/todos.json';
@@ -14,13 +14,13 @@ export function getTodoService(): TodoService {
       process.env.TODOS_DATA_FILE ?? DEFAULT_DATA_FILE,
     );
     globalForTodos.todoService = new TodoService({
-      repository: new FileTodoRepository(dataFile),
+      store: new FileTodoStore(dataFile),
     });
   }
   return globalForTodos.todoService;
 }
 
-/** Test hook: swap the service (e.g. for one backed by an in-memory repository). */
+/** Test hook: swap the service (e.g. for one backed by an in-memory store). */
 export function setTodoService(service: TodoService | undefined): void {
   globalForTodos.todoService = service;
 }

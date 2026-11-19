@@ -1,66 +1,90 @@
 import { randomUUID } from 'node:crypto';
-import { TodoNotFoundError } from './errors';
-import type { TodoRepository } from './repositories/todo-repository';
-import type { Todo } from './todo';
+import { TodoNotFoundError, ValidationError } from './errors';
+import type { StoreData, TodoStore } from './store/todo-store';
+import { sortTodos, type Todo } from './todo';
 import { parseCreateTodoInput, parseUpdateTodoInput } from './validation';
 
 export interface TodoServiceDeps {
-  repository: TodoRepository;
+  store: TodoStore;
   now?: () => Date;
   generateId?: () => string;
 }
 
+function findTodo(data: StoreData, id: string): Todo {
+  const todo = data.todos.find((candidate) => candidate.id === id);
+  if (!todo) throw new TodoNotFoundError(id);
+  return todo;
+}
+
+/** Every id must be a stored label; checked inside the transaction so it cannot race a label delete. */
+function assertLabelsExist(data: StoreData, labelIds: readonly string[]): void {
+  const existing = new Set(data.labels.map((label) => label.id));
+  const unknownId = labelIds.find((id) => !existing.has(id));
+  if (unknownId !== undefined) {
+    throw new ValidationError(`Unknown label id "${unknownId}". The label may have been deleted.`);
+  }
+}
+
 /** Application service: all TODO business rules live here, not in the HTTP layer. */
 export class TodoService {
-  private readonly repository: TodoRepository;
+  private readonly store: TodoStore;
   private readonly now: () => Date;
   private readonly generateId: () => string;
 
-  constructor({ repository, now = () => new Date(), generateId = randomUUID }: TodoServiceDeps) {
-    this.repository = repository;
+  constructor({ store, now = () => new Date(), generateId = randomUUID }: TodoServiceDeps) {
+    this.store = store;
     this.now = now;
     this.generateId = generateId;
   }
 
-  /** Open todos first, then completed; newest first inside each group. */
+  /** Every todo, in display order (see sortTodos). */
   async list(): Promise<Todo[]> {
-    const todos = await this.repository.list();
-    return todos.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
+    const { todos } = await this.store.read();
+    return sortTodos(todos);
   }
 
   async create(input: unknown): Promise<Todo> {
-    const { title } = parseCreateTodoInput(input);
-    const todo: Todo = {
-      id: this.generateId(),
-      title,
-      completed: false,
-      createdAt: this.now().toISOString(),
-      completedAt: null,
-    };
-    await this.repository.insert(todo);
-    return todo;
+    const { title, labelIds } = parseCreateTodoInput(input);
+    return this.store.transaction((draft) => {
+      assertLabelsExist(draft, labelIds);
+      const todo: Todo = {
+        id: this.generateId(),
+        title,
+        completed: false,
+        createdAt: this.now().toISOString(),
+        completedAt: null,
+        labelIds,
+      };
+      draft.todos.push(todo);
+      return todo;
+    });
   }
 
-  async setCompleted(id: string, input: unknown): Promise<Todo> {
-    const { completed } = parseUpdateTodoInput(input);
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new TodoNotFoundError(id);
-    if (existing.completed === completed) return existing;
-
-    const updated: Todo = {
-      ...existing,
-      completed,
-      completedAt: completed ? this.now().toISOString() : null,
-    };
-    await this.repository.update(updated);
-    return updated;
+  /**
+   * Partial update: absent fields are left untouched; sending the current values is a no-op.
+   * `labelIds` replaces the whole set. Input is validated before the todo is looked up.
+   */
+  async update(id: string, input: unknown): Promise<Todo> {
+    const { completed, labelIds } = parseUpdateTodoInput(input);
+    return this.store.transaction((draft) => {
+      const todo = findTodo(draft, id);
+      if (labelIds !== undefined) {
+        assertLabelsExist(draft, labelIds);
+        todo.labelIds = labelIds;
+      }
+      if (completed !== undefined && todo.completed !== completed) {
+        todo.completed = completed;
+        todo.completedAt = completed ? this.now().toISOString() : null;
+      }
+      return todo;
+    });
   }
 
   async remove(id: string): Promise<void> {
-    const deleted = await this.repository.delete(id);
-    if (!deleted) throw new TodoNotFoundError(id);
+    await this.store.transaction((draft) => {
+      const index = draft.todos.findIndex((todo) => todo.id === id);
+      if (index === -1) throw new TodoNotFoundError(id);
+      draft.todos.splice(index, 1);
+    });
   }
 }

@@ -7,11 +7,11 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/** PATCH /api/todos/:id { completed } → 200 { todo } | 400 VALIDATION_ERROR | 404 TODO_NOT_FOUND */
+/** PATCH /api/todos/:id { completed?, labelIds? } → 200 { todo } | 400 VALIDATION_ERROR | 404 TODO_NOT_FOUND */
 export function PATCH(request: Request, { params }: RouteParams): Promise<Response> {
   return withErrorHandling(async () => {
     const { id } = await params;
-    const todo = await getTodoService().setCompleted(id, await readJsonBody(request));
+    const todo = await getTodoService().update(id, await readJsonBody(request));
     return Response.json({ todo });
   });
 }
