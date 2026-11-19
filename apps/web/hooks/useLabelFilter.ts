@@ -2,8 +2,13 @@
 
 import type { Label } from '@todos/core/client';
 import { useSearchParams } from 'next/navigation';
-import { useCallback, useMemo } from 'react';
-import { parseLabelFilter, serializeLabelFilter, type LabelFilter } from '@/lib/label-filter';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+  EMPTY_LABEL_FILTER,
+  parseLabelFilter,
+  serializeLabelFilter,
+  type LabelFilter,
+} from '@/lib/label-filter';
 
 export interface UseLabelFilterResult {
   filter: LabelFilter;
@@ -22,6 +27,20 @@ export function useLabelFilter(labels: readonly Label[]): UseLabelFilterResult {
   const searchParams = useSearchParams();
   const filter = useMemo(() => parseLabelFilter(searchParams, labels), [searchParams, labels]);
 
+  // Actions can run long after the render that created them (e.g. `drop` after an awaited
+  // DELETE), so they read the filter from the current URL and the latest labels, never from a
+  // captured render. Otherwise a chip toggled meanwhile would be reverted.
+  const labelsRef = useRef(labels);
+  useEffect(() => {
+    labelsRef.current = labels;
+  }, [labels]);
+
+  const read = useCallback(
+    (): LabelFilter =>
+      parseLabelFilter(new URLSearchParams(window.location.search), labelsRef.current),
+    [],
+  );
+
   const write = useCallback((next: LabelFilter) => {
     const { pathname, search, hash } = window.location;
     const query = serializeLabelFilter(next, new URLSearchParams(search));
@@ -30,26 +49,31 @@ export function useLabelFilter(labels: readonly Label[]): UseLabelFilterResult {
 
   const toggle = useCallback(
     (labelId: string) => {
-      const selected = new Set(filter.labelIds);
+      const current = read();
+      const selected = new Set(current.labelIds);
       if (selected.has(labelId)) selected.delete(labelId);
       else selected.add(labelId);
-      const labelIds = labels.filter((label) => selected.has(label.id)).map((label) => label.id);
-      write({ ...filter, labelIds });
+      const labelIds = labelsRef.current
+        .filter((label) => selected.has(label.id))
+        .map((label) => label.id);
+      write({ ...current, labelIds });
     },
-    [filter, labels, write],
+    [read, write],
   );
 
-  const toggleNoLabel = useCallback(
-    () => write({ ...filter, noLabel: !filter.noLabel }),
-    [filter, write],
-  );
+  const toggleNoLabel = useCallback(() => {
+    const current = read();
+    write({ ...current, noLabel: !current.noLabel });
+  }, [read, write]);
 
-  const clear = useCallback(() => write({ labelIds: [], noLabel: false }), [write]);
+  const clear = useCallback(() => write(EMPTY_LABEL_FILTER), [write]);
 
   const drop = useCallback(
-    (labelId: string) =>
-      write({ ...filter, labelIds: filter.labelIds.filter((id) => id !== labelId) }),
-    [filter, write],
+    (labelId: string) => {
+      const current = read();
+      write({ ...current, labelIds: current.labelIds.filter((id) => id !== labelId) });
+    },
+    [read, write],
   );
 
   return { filter, toggle, toggleNoLabel, clear, drop };

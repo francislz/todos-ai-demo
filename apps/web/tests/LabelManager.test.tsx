@@ -1,5 +1,5 @@
-import { LABELS_MAX, sortLabels } from '@todos/core/client';
-import { render, screen, within } from '@testing-library/react';
+import { ERROR_CODES, LABELS_MAX, sortLabels } from '@todos/core/client';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -195,6 +195,112 @@ describe('LabelManager', () => {
     ).not.toBeInTheDocument();
     expect(window.location.search).toBe('?label=work');
     expect(screen.getByTestId('filter-summary')).toHaveTextContent('Showing 1 of 4 todos');
+  });
+
+  it('a label already deleted elsewhere is removed everywhere, without an error', async () => {
+    const api = fakeApi({
+      labels: {
+        remove: vi.fn(async () => {
+          throw new ApiError(404, ERROR_CODES.LABEL_NOT_FOUND, 'Label "travel" was not found.');
+        }),
+      },
+    });
+    renderApp(api, '/?label=travel&label=work');
+    await openPanel();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete label "travel"' }));
+    await userEvent.click(screen.getByTestId('label-delete-confirm'));
+
+    expect(await screen.findByTestId('label-count')).toHaveTextContent('3 of 50');
+    expect(screen.queryByTestId('label-error')).not.toBeInTheDocument();
+    expect(
+      screen.queryAllByTestId('label-chip').filter((c) => c.dataset.labelId === 'travel'),
+    ).toEqual([]);
+    expect(window.location.search).toBe('?label=work');
+    // The add form was pre-labelled with the filter; the gone label left it too.
+    expect(
+      within(screen.getByTestId('form-labels'))
+        .queryAllByTestId('label-chip')
+        .map((c) => c.dataset.labelId),
+    ).toEqual(['work']);
+  });
+
+  it('a label gone on rename disappears from the panel and shows the error', async () => {
+    renderApp(
+      fakeApi({
+        labels: {
+          update: vi.fn(async () => {
+            throw new ApiError(404, ERROR_CODES.LABEL_NOT_FOUND, 'Label "travel" was not found.');
+          }),
+        },
+      }),
+    );
+    const panel = await openPanel();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit label "travel"' }));
+    await userEvent.clear(screen.getByTestId('label-name-input'));
+    await userEvent.type(screen.getByTestId('label-name-input'), 'trips');
+    await userEvent.click(screen.getByTestId('label-save'));
+
+    expect(await screen.findByTestId('label-error')).toHaveTextContent(
+      'Label "travel" was not found.',
+    );
+    expect(within(panel).getByTestId('label-count')).toHaveTextContent('3 of 50');
+    expect(
+      within(panel).queryByRole('button', { name: 'Edit label "travel"' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps a filter change made while a label delete is in flight', async () => {
+    let finishDelete: () => void = () => undefined;
+    const api = fakeApi({
+      labels: {
+        remove: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              finishDelete = resolve;
+            }),
+        ),
+      },
+    });
+    renderApp(api, '/?label=travel');
+    await openPanel();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete label "travel"' }));
+    await userEvent.click(screen.getByTestId('label-delete-confirm'));
+    await userEvent.click(
+      within(screen.getByTestId('label-filter')).getByRole('button', { name: 'work' }),
+    );
+    expect(window.location.search).toBe('?label=travel&label=work');
+
+    await act(async () => finishDelete());
+
+    expect(await screen.findByTestId('label-count')).toHaveTextContent('3 of 50');
+    expect(window.location.search).toBe('?label=work');
+    expect(
+      within(screen.getByTestId('label-filter')).getByRole('button', { name: 'work' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('clears the panel error when the panel is closed and reopened', async () => {
+    renderApp(
+      fakeApi({
+        labels: {
+          create: vi.fn(async () => {
+            throw new ApiError(409, ERROR_CODES.LABEL_NAME_TAKEN, 'A label "work" already exists.');
+          }),
+        },
+      }),
+    );
+    await openPanel();
+    await userEvent.type(screen.getByTestId('new-label-input'), 'work');
+    await userEvent.click(screen.getByTestId('create-label-button'));
+    expect(await screen.findByTestId('label-error')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('manage-labels-button'));
+    await openPanel();
+
+    expect(screen.queryByTestId('label-error')).not.toBeInTheDocument();
   });
 
   it('shows the empty state without labels', async () => {

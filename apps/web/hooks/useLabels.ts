@@ -1,13 +1,14 @@
 'use client';
 
 import {
+  ERROR_CODES,
   sortLabels,
   type CreateLabelInput,
   type Label,
   type UpdateLabelInput,
 } from '@todos/core/client';
 import { useCallback, useState } from 'react';
-import type { LabelsApi } from '@/lib/api-client';
+import { ApiError, type LabelsApi } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 
 export const LABEL_ACTIONS = {
@@ -35,6 +36,11 @@ export interface UseLabelsResult {
   remove: (id: string) => Promise<boolean>;
 }
 
+/** The API says the label no longer exists (e.g. deleted in another tab). */
+function isLabelNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.code === ERROR_CODES.LABEL_NOT_FOUND;
+}
+
 /** Label state seeded from the server render, plus the Manage labels panel actions. */
 export function useLabels(api: LabelsApi, initialLabels: Label[]): UseLabelsResult {
   const [labels, setLabels] = useState<Label[]>(() => sortLabels(initialLabels));
@@ -48,6 +54,11 @@ export function useLabels(api: LabelsApi, initialLabels: Label[]): UseLabelsResu
       try {
         return await work();
       } catch (err) {
+        // The label is already gone on the server: forget it locally too, then report the error.
+        if (action.labelId !== undefined && isLabelNotFound(err)) {
+          const goneId = action.labelId;
+          setLabels((current) => current.filter((l) => l.id !== goneId));
+        }
         setError(errorMessage(err));
         return null;
       } finally {
@@ -82,7 +93,12 @@ export function useLabels(api: LabelsApi, initialLabels: Label[]): UseLabelsResu
   const remove = useCallback(
     async (id: string) => {
       const removed = await run({ kind: LABEL_ACTIONS.remove, labelId: id }, async () => {
-        await api.remove(id);
+        try {
+          await api.remove(id);
+        } catch (err) {
+          // Already deleted (e.g. in another tab): the outcome the user asked for, not an error.
+          if (!isLabelNotFound(err)) throw err;
+        }
         return true;
       });
       if (removed) setLabels((current) => current.filter((l) => l.id !== id));

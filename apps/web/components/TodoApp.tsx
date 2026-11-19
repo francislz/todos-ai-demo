@@ -77,13 +77,21 @@ export function TodoApp({ initialTodos, initialLabels, api = appApi }: TodoAppPr
     return removed;
   });
 
-  const toggleManager = action(() => setManagerOpen((open) => !open));
+  /** A panel error belongs to the panel session: it does not survive closing and reopening. */
+  const toggleManager = action(() => {
+    labels.clearError();
+    setManagerOpen((open) => !open);
+  });
 
   /** From a picker's empty state: open the panel, or focus its input when already open. */
   function openManager() {
     setHiddenTitle(null);
-    if (managerOpen) newLabelInputRef.current?.focus();
-    else setManagerOpen(true);
+    if (managerOpen) {
+      newLabelInputRef.current?.focus();
+      return;
+    }
+    labels.clearError();
+    setManagerOpen(true);
   }
 
   return (
