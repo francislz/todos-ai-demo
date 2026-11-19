@@ -1,6 +1,6 @@
 'use client';
 
-import { sortTodos, type Todo } from '@todos/core/client';
+import { sortTodos, type CreateTodoInput, type Todo } from '@todos/core/client';
 import { useCallback, useState } from 'react';
 import type { TodosApi } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
@@ -9,9 +9,12 @@ export interface UseTodosResult {
   todos: Todo[];
   busyIds: ReadonlySet<string>;
   error: string | null;
-  create: (title: string) => Promise<Todo | null>;
+  create: (input: CreateTodoInput) => Promise<Todo | null>;
   toggle: (todo: Todo) => Promise<void>;
+  setLabels: (todo: Todo, labelIds: string[]) => Promise<void>;
   remove: (todo: Todo) => Promise<void>;
+  /** Local only: strips a deleted label from every todo (the server already did it). */
+  removeLabelFromAll: (labelId: string) => void;
 }
 
 type ActionResult<T> = { ok: true; value: T } | { ok: false };
@@ -53,8 +56,8 @@ export function useTodos(api: TodosApi, initialTodos: Todo[]): UseTodosResult {
   }, []);
 
   const create = useCallback(
-    async (title: string) => {
-      const result = await runAction(() => api.create(title));
+    async (input: CreateTodoInput) => {
+      const result = await runAction(() => api.create(input));
       if (!result.ok) return null;
       setTodos((current) => sortTodos([result.value, ...current]));
       return result.value;
@@ -64,7 +67,18 @@ export function useTodos(api: TodosApi, initialTodos: Todo[]): UseTodosResult {
 
   const toggle = useCallback(
     async (todo: Todo) => {
-      const result = await runAction(() => api.setCompleted(todo.id, !todo.completed), todo.id);
+      const result = await runAction(
+        () => api.update(todo.id, { completed: !todo.completed }),
+        todo.id,
+      );
+      if (result.ok) replaceTodo(result.value);
+    },
+    [api, runAction, replaceTodo],
+  );
+
+  const setLabels = useCallback(
+    async (todo: Todo, labelIds: string[]) => {
+      const result = await runAction(() => api.update(todo.id, { labelIds }), todo.id);
       if (result.ok) replaceTodo(result.value);
     },
     [api, runAction, replaceTodo],
@@ -78,5 +92,15 @@ export function useTodos(api: TodosApi, initialTodos: Todo[]): UseTodosResult {
     [api, runAction],
   );
 
-  return { todos, busyIds, error, create, toggle, remove };
+  const removeLabelFromAll = useCallback((labelId: string) => {
+    setTodos((current) =>
+      current.map((todo) =>
+        todo.labelIds.includes(labelId)
+          ? { ...todo, labelIds: todo.labelIds.filter((id) => id !== labelId) }
+          : todo,
+      ),
+    );
+  }, []);
+
+  return { todos, busyIds, error, create, toggle, setLabels, remove, removeLabelFromAll };
 }

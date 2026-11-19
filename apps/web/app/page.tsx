@@ -1,10 +1,11 @@
+import { Suspense } from 'react';
 import { TodoApp } from '@/components/TodoApp';
-import { getTodoService } from '@/lib/services';
+import { getLabelService, getTodoService } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const todos = await getTodoService().list();
+  const [todos, labels] = await Promise.all([getTodoService().list(), getLabelService().list()]);
 
   return (
     <main className="page">
@@ -14,7 +15,10 @@ export default async function HomePage() {
           Small app, real workflow: every change ships through Claude.
         </p>
       </header>
-      <TodoApp initialTodos={todos} />
+      {/* useSearchParams (the label filter) requires a Suspense boundary. */}
+      <Suspense fallback={null}>
+        <TodoApp initialTodos={todos} initialLabels={labels} />
+      </Suspense>
     </main>
   );
 }
