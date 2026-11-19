@@ -1,0 +1,25 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local data store used by the web app (see TODOS_DATA_FILE)
+.data/
+
+# Env files: never commit secrets
+.env
+.env.*
+!.env.example
+
+# Playwright
+playwright-report/
+test-results/
+
+# Claude local artifacts
+.claude/settings.local.json
+.claude/worktrees/
+
+.DS_Store

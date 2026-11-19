@@ -1,0 +1,21 @@
+{
+  "name": "@todos/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TODO domain: types, validation, service and repositories. Framework-agnostic.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^5.1.1"
+  }
+}

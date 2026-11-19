@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm ci)",
+      "Bash(npm install*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npx playwright *)",
+      "Bash(npx prettier *)",
+      "Bash(node scripts/claude/board.mjs*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git fetch*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git rebase*)",
+      "Bash(git worktree*)",
+      "Bash(git push -u origin feature/*)",
+      "Bash(git push origin feature/*)",
+      "Bash(gh api repos/francislz/todos-ai-demo/*)",
+      "Bash(curl -s http://localhost*)"
+    ],
+    "deny": [
+      "Bash(git push*main*)",
+      "Bash(git push --force*)",
+      "Bash(gh pr merge*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./apps/web/.env*)"
+    ]
+  }
+}
