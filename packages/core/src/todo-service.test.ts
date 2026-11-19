@@ -1,19 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ERROR_CODES, TodoNotFoundError, ValidationError } from './errors';
-import { InMemoryTodoRepository } from './repositories/in-memory-todo-repository';
+import { InMemoryTodoStore } from './store/in-memory-todo-store';
 import { TODO_TITLE_MAX_LENGTH } from './todo';
 import { TodoService } from './todo-service';
 
 function createService() {
   let tick = 0;
   let nextId = 0;
-  const repository = new InMemoryTodoRepository();
+  const store = new InMemoryTodoStore();
   const service = new TodoService({
-    repository,
+    store,
     now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)),
     generateId: () => `todo-${++nextId}`,
   });
-  return { service, repository };
+  return { service, store };
 }
 
 describe('TodoService', () => {
