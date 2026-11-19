@@ -692,6 +692,7 @@ body {
   flex: 1;
   color: var(--muted);
   font-size: 0.8125rem;
+  white-space: nowrap;
 }
 
 .label-row__actions {
