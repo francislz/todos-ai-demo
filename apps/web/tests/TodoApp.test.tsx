@@ -12,6 +12,7 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     completed: false,
     createdAt: '2026-01-01T00:00:00.000Z',
     completedAt: null,
+    labelIds: [],
     ...overrides,
   };
 }
