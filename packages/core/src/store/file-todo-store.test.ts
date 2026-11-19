@@ -74,6 +74,18 @@ describe('FileTodoStore', () => {
     expect(await new FileTodoStore(filePath).read()).toEqual({ todos: [], labels: [] });
   });
 
+  it('ignores malformed entries in a hand-edited file', async () => {
+    await writeRaw({
+      todos: [null, 1, 'todo', makeStoredTodo('a')],
+      labels: [null, 2, 'label', makeStoredLabel('l1')],
+    });
+
+    expect(await new FileTodoStore(filePath).read()).toEqual({
+      todos: [makeStoredTodo('a')],
+      labels: [makeStoredLabel('l1')],
+    });
+  });
+
   describe('a file written before labels existed', () => {
     const legacyTodo = {
       id: 'a',
