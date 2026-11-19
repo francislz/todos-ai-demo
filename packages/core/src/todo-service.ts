@@ -49,11 +49,12 @@ export class TodoService {
     });
   }
 
-  async setCompleted(id: string, input: unknown): Promise<Todo> {
+  /** Partial update: absent fields are left untouched; sending the current values is a no-op. */
+  async update(id: string, input: unknown): Promise<Todo> {
     const { completed } = parseUpdateTodoInput(input);
     return this.store.transaction((draft) => {
       const todo = findTodo(draft, id);
-      if (todo.completed !== completed) {
+      if (completed !== undefined && todo.completed !== completed) {
         todo.completed = completed;
         todo.completedAt = completed ? this.now().toISOString() : null;
       }

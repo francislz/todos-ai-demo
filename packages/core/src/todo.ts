@@ -11,8 +11,9 @@ export interface CreateTodoInput {
   title: string;
 }
 
+/** A partial update: absent fields are left untouched. */
 export interface UpdateTodoInput {
-  completed: boolean;
+  completed?: boolean;
 }
 
 export const TODO_TITLE_MAX_LENGTH = 200;

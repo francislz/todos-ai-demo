@@ -52,7 +52,7 @@ describe('TodoService', () => {
       const first = await service.create({ title: 'first' });
       const second = await service.create({ title: 'second' });
       const third = await service.create({ title: 'third' });
-      await service.setCompleted(third.id, { completed: true });
+      await service.update(third.id, { completed: true });
 
       const titles = (await service.list()).map((todo) => todo.title);
 
@@ -60,33 +60,33 @@ describe('TodoService', () => {
     });
   });
 
-  describe('setCompleted', () => {
+  describe('update', () => {
     it('completes and reopens a todo, tracking completedAt', async () => {
       const todo = await service.create({ title: 'Ship it' });
 
-      const done = await service.setCompleted(todo.id, { completed: true });
+      const done = await service.update(todo.id, { completed: true });
       expect(done.completed).toBe(true);
       expect(done.completedAt).toBe('2026-01-01T00:00:01.000Z');
 
-      const reopened = await service.setCompleted(todo.id, { completed: false });
+      const reopened = await service.update(todo.id, { completed: false });
       expect(reopened.completed).toBe(false);
       expect(reopened.completedAt).toBeNull();
     });
 
     it('is a no-op when the state does not change', async () => {
       const todo = await service.create({ title: 'Idempotent' });
-      expect(await service.setCompleted(todo.id, { completed: false })).toEqual(todo);
+      expect(await service.update(todo.id, { completed: false })).toEqual(todo);
     });
 
     it('rejects an invalid body', async () => {
       const todo = await service.create({ title: 'Typed' });
-      await expect(service.setCompleted(todo.id, { completed: 'yes' })).rejects.toBeInstanceOf(
+      await expect(service.update(todo.id, { completed: 'yes' })).rejects.toBeInstanceOf(
         ValidationError,
       );
     });
 
     it('throws TODO_NOT_FOUND for an unknown id', async () => {
-      await expect(service.setCompleted('nope', { completed: true })).rejects.toMatchObject({
+      await expect(service.update('nope', { completed: true })).rejects.toMatchObject({
         code: ERROR_CODES.TODO_NOT_FOUND,
       });
     });
