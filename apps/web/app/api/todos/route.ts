@@ -1,5 +1,5 @@
 import { readJsonBody, withErrorHandling } from '@/lib/http';
-import { getTodoService } from '@/lib/todo-service';
+import { getTodoService } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 

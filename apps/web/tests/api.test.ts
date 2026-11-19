@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { InMemoryTodoStore, TodoService } from '@todos/core';
+import { InMemoryTodoStore } from '@todos/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as todoByIdRoute from '@/app/api/todos/[id]/route';
 import * as todosRoute from '@/app/api/todos/route';
-import { setTodoService } from '@/lib/todo-service';
+import { setTodoStore } from '@/lib/services';
 
 function jsonRequest(method: string, body?: unknown, rawBody?: string): Request {
   return new Request('http://localhost/api/todos', {
@@ -22,11 +22,11 @@ async function createTodo(title: string) {
 
 describe('/api/todos', () => {
   beforeEach(() => {
-    setTodoService(new TodoService({ store: new InMemoryTodoStore() }));
+    setTodoStore(new InMemoryTodoStore());
   });
 
   afterEach(() => {
-    setTodoService(undefined);
+    setTodoStore(undefined);
   });
 
   it('creates and lists todos', async () => {
