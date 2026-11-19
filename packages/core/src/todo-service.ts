@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { TodoNotFoundError } from './errors';
 import type { StoreData, TodoStore } from './store/todo-store';
-import type { Todo } from './todo';
+import { sortTodos, type Todo } from './todo';
 import { parseCreateTodoInput, parseUpdateTodoInput } from './validation';
 
 export interface TodoServiceDeps {
@@ -28,13 +28,10 @@ export class TodoService {
     this.generateId = generateId;
   }
 
-  /** Open todos first, then completed; newest first inside each group. */
+  /** Every todo, in display order (see sortTodos). */
   async list(): Promise<Todo[]> {
     const { todos } = await this.store.read();
-    return todos.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
+    return sortTodos(todos);
   }
 
   async create(input: unknown): Promise<Todo> {

@@ -16,3 +16,11 @@ export interface UpdateTodoInput {
 }
 
 export const TODO_TITLE_MAX_LENGTH = 200;
+
+/** Display order shared by server and client: open first, then completed; newest first within each group. Returns a new array. */
+export function sortTodos(todos: readonly Todo[]): Todo[] {
+  return [...todos].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
