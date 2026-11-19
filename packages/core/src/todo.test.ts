@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sortTodos, type Todo } from './todo';
 
 function makeTodo(id: string, createdAt: string, completed = false): Todo {
-  return { id, title: id, completed, createdAt, completedAt: null };
+  return { id, title: id, completed, createdAt, completedAt: null, labelIds: [] };
 }
 
 describe('sortTodos', () => {

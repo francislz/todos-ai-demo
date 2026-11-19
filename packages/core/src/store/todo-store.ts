@@ -1,8 +1,10 @@
+import type { Label } from '../label';
 import type { Todo } from '../todo';
 
-/** Everything the app persists, as one document. */
+/** Everything the app persists, as one document. Every id in a todo's labelIds is a stored label. */
 export interface StoreData {
   todos: Todo[];
+  labels: Label[];
 }
 
 /**

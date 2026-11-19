@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileTodoStore } from './file-todo-store';
-import { describeTodoStoreContract, makeStoredTodo } from './todo-store-contract';
+import { describeTodoStoreContract, makeStoredLabel, makeStoredTodo } from './todo-store-contract';
 
 const contractDirs: string[] = [];
 
@@ -40,7 +40,7 @@ describe('FileTodoStore', () => {
   }
 
   it('reads a missing file as an empty store without creating it', async () => {
-    expect(await new FileTodoStore(filePath).read()).toEqual({ todos: [] });
+    expect(await new FileTodoStore(filePath).read()).toEqual({ todos: [], labels: [] });
     await expect(readFile(filePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -50,7 +50,7 @@ describe('FileTodoStore', () => {
       draft.todos.push(makeStoredTodo('a'));
     });
 
-    expect(await readRaw()).toEqual({ todos: [makeStoredTodo('a')] });
+    expect(await readRaw()).toEqual({ todos: [makeStoredTodo('a')], labels: [] });
     expect(await readdir(dirname(filePath))).toEqual(['todos.json']);
     expect((await new FileTodoStore(filePath).read()).todos).toEqual([makeStoredTodo('a')]);
   });
@@ -69,9 +69,59 @@ describe('FileTodoStore', () => {
     expect(await readFile(filePath, 'utf8')).toBe(before);
   });
 
-  it('treats a file without a todos array as empty', async () => {
-    await writeRaw({ todos: 'not an array' });
-    expect(await new FileTodoStore(filePath).read()).toEqual({ todos: [] });
+  it('treats non-array collections as empty', async () => {
+    await writeRaw({ todos: 'not an array', labels: { nope: true } });
+    expect(await new FileTodoStore(filePath).read()).toEqual({ todos: [], labels: [] });
+  });
+
+  describe('a file written before labels existed', () => {
+    const legacyTodo = {
+      id: 'a',
+      title: 'Legacy',
+      completed: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      completedAt: '2026-01-02T00:00:00.000Z',
+    };
+
+    it('reads as no labels and every todo unlabelled', async () => {
+      await writeRaw({ todos: [legacyTodo] });
+
+      expect(await new FileTodoStore(filePath).read()).toEqual({
+        labels: [],
+        todos: [{ ...legacyTodo, labelIds: [] }],
+      });
+    });
+
+    it('is not rewritten by a read', async () => {
+      await writeRaw({ todos: [legacyTodo] });
+      const before = await readFile(filePath, 'utf8');
+
+      await new FileTodoStore(filePath).read();
+
+      expect(await readFile(filePath, 'utf8')).toBe(before);
+    });
+
+    it('is rewritten in the new shape by the first mutation', async () => {
+      await writeRaw({ todos: [legacyTodo] });
+
+      await new FileTodoStore(filePath).transaction((draft) => {
+        draft.todos.push(makeStoredTodo('b'));
+      });
+
+      expect(await readRaw()).toEqual({
+        labels: [],
+        todos: [{ ...legacyTodo, labelIds: [] }, makeStoredTodo('b')],
+      });
+    });
+  });
+
+  it('drops label ids that match no stored label', async () => {
+    await writeRaw({
+      labels: [makeStoredLabel('l1')],
+      todos: [makeStoredTodo('a', { labelIds: ['ghost', 'l1', 'ghost-2'] })],
+    });
+
+    expect((await new FileTodoStore(filePath).read()).todos[0]?.labelIds).toEqual(['l1']);
   });
 
   it('propagates JSON errors instead of silently discarding data', async () => {
