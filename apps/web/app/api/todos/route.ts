@@ -12,7 +12,7 @@ export function GET(): Promise<Response> {
   });
 }
 
-/** POST /api/todos { title } → 201 { todo } | 400 VALIDATION_ERROR */
+/** POST /api/todos { title, labelIds? } → 201 { todo } | 400 VALIDATION_ERROR */
 export function POST(request: Request): Promise<Response> {
   return withErrorHandling(async () => {
     const body: TodoResponse = { todo: await getTodoService().create(await readJsonBody(request)) };

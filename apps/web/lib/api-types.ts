@@ -1,7 +1,7 @@
 /**
  * Browser-safe HTTP API types shared by the route handlers (server) and the API client (browser).
  */
-import type { ErrorCode, Todo } from '@todos/core/client';
+import type { ErrorCode, Label, Todo } from '@todos/core/client';
 
 /** Code of an unexpected server failure (HTTP 500). */
 export const INTERNAL_ERROR_CODE = 'INTERNAL_ERROR';
@@ -22,4 +22,12 @@ export interface TodosResponse {
 
 export interface TodoResponse {
   todo: Todo;
+}
+
+export interface LabelsResponse {
+  labels: Label[];
+}
+
+export interface LabelResponse {
+  label: Label;
 }
